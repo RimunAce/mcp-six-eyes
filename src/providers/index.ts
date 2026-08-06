@@ -30,7 +30,7 @@ function createProvider(options: {
         baseUrl: options.baseUrl ?? "https://openrouter.ai/api/v1",
         timeoutMs: options.timeoutMs,
         extraHeaders: {
-          "HTTP-Referer": "https://github.com/RimunAce/mcp-six-eyes",
+          "HTTP-Referer": "https://www.npmjs.com/package/mcp-six-eyes",
           "X-Title": "mcp-six-eyes",
         },
       });

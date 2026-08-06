@@ -29,9 +29,9 @@ describe("open source package surface", () => {
     assert.match(pkg.scripts["test:unit"], /scripts\/run-tests\.mjs/);
     assert.ok(pkg.engines?.node);
     assert.match(pkg.engines.node, /20/);
-    assert.match(pkg.repository.url, /github\.com\/RimunAce\/mcp-six-eyes/);
-    assert.match(pkg.bugs.url, /github\.com\/RimunAce\/mcp-six-eyes\/issues/);
-    assert.match(pkg.homepage, /github\.com\/RimunAce\/mcp-six-eyes/);
+    assert.match(pkg.homepage, /npmjs\.com\/package\/mcp-six-eyes/);
+    assert.equal(pkg.repository, undefined);
+    assert.equal(pkg.bugs, undefined);
   });
 
   it("ships MIT license under the current maintainer", async () => {
@@ -58,21 +58,23 @@ describe("open source package surface", () => {
       assert.match(readme, new RegExp(tool));
     }
     assert.match(readme, /npx -y mcp-six-eyes/);
-    assert.match(readme, /github:RimunAce\/mcp-six-eyes/);
-    assert.match(readme, /https:\/\/github\.com\/RimunAce\/mcp-six-eyes/);
+    assert.match(readme, /npmjs\.com\/package\/mcp-six-eyes/);
     assert.match(readme, /## Security/);
     assert.match(readme, /## Contributing/);
     assert.match(readme, /npm test/);
     assert.doesNotMatch(readme, /Gojo|Satoru|—|OWNER/);
+    assert.doesNotMatch(readme, /github:RimunAce\/mcp-six-eyes|github\.com\/RimunAce\/mcp-six-eyes/);
   });
 
   it("includes contributor and security docs", async () => {
     const contributing = await readText("CONTRIBUTING.md");
     const security = await readText("SECURITY.md");
     assert.match(contributing, /npm test/);
-    assert.match(contributing, /github\.com\/RimunAce\/mcp-six-eyes/);
+    assert.match(contributing, /npm publish --access public/);
     assert.match(security, /Security/i);
-    assert.match(security, /RimunAce\/mcp-six-eyes/);
+    assert.match(security, /npmjs\.com\/~rimunace/);
+    assert.doesNotMatch(contributing, /github\.com\/RimunAce\/mcp-six-eyes/);
+    assert.doesNotMatch(security, /github\.com\/RimunAce\/mcp-six-eyes/);
   });
 
   it("keeps secrets out of git", async () => {

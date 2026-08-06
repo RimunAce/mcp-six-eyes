@@ -92,12 +92,20 @@ Supported source forms:
 - Node.js 20+
 - A vision-capable API key (OpenAI, Anthropic, Google, OpenRouter, or any OpenAI-compatible endpoint)
 
-## Quick start with npx
+## Install
 
-After the package is published to npm:
+Published on npm as [`mcp-six-eyes`](https://www.npmjs.com/package/mcp-six-eyes).
 
 ```bash
 npx -y mcp-six-eyes
+```
+
+Or install globally / as a project dependency:
+
+```bash
+npm install -g mcp-six-eyes
+# or
+npm install mcp-six-eyes
 ```
 
 Most people wire it into an MCP client instead of running it by hand. Example Claude Desktop / Cursor config:
@@ -124,28 +132,9 @@ Why `npx` is popular here:
 - `-y` skips the install prompt on first run
 - npm caches the package for later launches
 
-### From a GitHub repo (before / without npm publish)
-
-```json
-{
-  "mcpServers": {
-    "mcp-six-eyes": {
-      "command": "npx",
-      "args": ["-y", "github:RimunAce/mcp-six-eyes"],
-      "env": {
-        "VISION_PROVIDER": "openai",
-        "OPENAI_API_KEY": "sk-..."
-      }
-    }
-  }
-}
-```
-
-### From a local checkout
+### Local development
 
 ```bash
-git clone https://github.com/RimunAce/mcp-six-eyes.git
-cd mcp-six-eyes
 npm install
 npm run build
 ```
@@ -157,7 +146,7 @@ Then either:
   "mcpServers": {
     "mcp-six-eyes": {
       "command": "npx",
-      "args": ["-y", "/absolute/path/to/mcp-six-eyes"],
+      "args": ["-y", "."],
       "env": {
         "VISION_PROVIDER": "openai",
         "OPENAI_API_KEY": "sk-..."
@@ -174,7 +163,7 @@ or point Node at the built entrypoint:
   "mcpServers": {
     "mcp-six-eyes": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-six-eyes/build/index.js"],
+      "args": ["./build/index.js"],
       "env": {
         "VISION_PROVIDER": "openai",
         "OPENAI_API_KEY": "sk-..."
@@ -368,44 +357,27 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for PR and coding guidelines.
 
 ## Links
 
-- GitHub: [RimunAce/mcp-six-eyes](https://github.com/RimunAce/mcp-six-eyes)
 - npm: [mcp-six-eyes](https://www.npmjs.com/package/mcp-six-eyes)
-- Maintainer npm: [rimunace](https://www.npmjs.com/~rimunace)
+- Maintainer: [rimunace](https://www.npmjs.com/~rimunace)
 
 ## Release workflow
 
 Maintainer path after local changes:
 
 ```bash
-# one-time machine setup
-gh auth login
+# one-time
 npm login
 
-# ship current package.json version
-npm run release
-```
-
-What `npm run release` does:
-
-1. Runs `npm test`
-2. Creates the public GitHub repo if needed (`RimunAce/mcp-six-eyes`)
-3. Pushes `main` and annotated tag `vX.Y.Z`
-4. Publishes to npm (`publishConfig.access = public`)
-
-Until npm auth is configured on this machine, you can still publish after login:
-
-```bash
-npm login
+# bump version + CHANGELOG, then ship
+npm test
 npm publish --access public
 ```
 
-Tagged pushes also trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml). For automated npm publishes from GitHub Actions:
+Optional helper (tests, then npm publish):
 
-1. Create an npm automation token on [npmjs.com](https://www.npmjs.com/)
-2. Add repo secret `NPM_TOKEN`
-3. Push a matching tag (`v1.1.0` for package version `1.1.0`)
-
-Without `NPM_TOKEN`, the release workflow still validates the tag and can refresh the GitHub Release notes.
+```bash
+npm run release
+```
 
 ## Security
 

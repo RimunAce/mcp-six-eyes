@@ -10,8 +10,6 @@ Requirements:
 - npm 10+
 
 ```bash
-git clone https://github.com/RimunAce/mcp-six-eyes.git
-cd mcp-six-eyes
 npm install
 npm test
 ```
@@ -88,10 +86,10 @@ npx @modelcontextprotocol/inspector node ./build/index.js
 Only maintainers ship versions:
 
 ```bash
-gh auth login
 npm login
 # bump version + CHANGELOG first when needed
-npm run release
+npm test
+npm publish --access public
 ```
 
 ## Reporting issues
@@ -102,6 +100,7 @@ Include:
 - MCP host (Claude Desktop, Cursor, etc.)
 - `VISION_PROVIDER` / model (redact keys)
 - Exact tool call and error text from stderr
+- Package version from `npm view mcp-six-eyes version`
 
 Security issues: see [SECURITY.md](./SECURITY.md).
 

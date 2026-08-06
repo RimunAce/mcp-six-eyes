@@ -20,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Package renamed to `mcp-six-eyes`
-- README generalized for npx / GitHub / local installs
-- Repository metadata pointed at [RimunAce/mcp-six-eyes](https://github.com/RimunAce/mcp-six-eyes)
+- README generalized for npm / npx / local installs
+- Package homepage points at the npm listing
 
 ## [1.0.0] - 2026-08-06
 
@@ -31,5 +31,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Providers: OpenAI, Anthropic, Google Gemini, OpenRouter, custom OpenAI-compatible
 - Optional fallback provider
 
-[1.1.0]: https://github.com/RimunAce/mcp-six-eyes/releases/tag/v1.1.0
-[1.0.0]: https://github.com/RimunAce/mcp-six-eyes/releases/tag/v1.0.0
+[1.1.0]: https://www.npmjs.com/package/mcp-six-eyes/v/1.1.0
+[1.0.0]: https://www.npmjs.com/package/mcp-six-eyes/v/1.0.0

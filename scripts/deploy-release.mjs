@@ -1,18 +1,16 @@
 #!/usr/bin/env node
 /**
- * One-shot release helper for mcp-six-eyes.
+ * One-shot npm release helper for mcp-six-eyes.
  *
  * Prerequisites:
- *   1. gh auth login
- *   2. npm login   (or NPM_TOKEN in the environment)
+ *   npm login   (or NPM_TOKEN in the environment)
  *
  * Usage:
  *   node scripts/deploy-release.mjs
  *   node scripts/deploy-release.mjs --skip-npm
- *   node scripts/deploy-release.mjs --skip-github
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -20,17 +18,8 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
 const skipNpm = args.has("--skip-npm");
-const skipGithub = args.has("--skip-github");
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 const version = pkg.version;
-const tag = `v${version}`;
-const repo = "RimunAce/mcp-six-eyes";
-const ghCandidates = [
-  process.env.GH_PATH,
-  path.join(process.env["ProgramFiles"] ?? "", "GitHub CLI", "gh.exe"),
-  path.join(process.env["LocalAppData"] ?? "", "Programs", "GitHub CLI", "gh.exe"),
-  "gh",
-].filter(Boolean);
 
 function useShell(command) {
   // Absolute paths (especially with spaces) must not go through cmd.exe.
@@ -61,17 +50,6 @@ function tryRun(command, commandArgs) {
   };
 }
 
-function resolveGh() {
-  for (const candidate of ghCandidates) {
-    if (path.isAbsolute(candidate) && !existsSync(candidate)) continue;
-    const probe = tryRun(candidate, ["--version"]);
-    if (probe.ok) return candidate;
-  }
-  throw new Error(
-    "GitHub CLI (gh) not found. Install it (winget install GitHub.cli), open a new terminal, then re-run.",
-  );
-}
-
 function ensureCleanTree() {
   const status = tryRun("git", ["status", "--porcelain"]);
   if (!status.ok) throw new Error(status.stderr || "git status failed");
@@ -92,64 +70,10 @@ function ensureNpmAuth() {
   console.log(`npm user: ${whoami.stdout}`);
 }
 
-function ensureGhAuth(gh) {
-  const status = tryRun(gh, ["auth", "status"]);
-  if (!status.ok) {
-    throw new Error("Not logged into GitHub CLI. Run: gh auth login");
-  }
-  console.log(status.stdout || status.stderr || "gh auth ok");
-}
-
-function ensureRemote(gh) {
-  const remote = tryRun("git", ["remote", "get-url", "origin"]);
-  if (remote.ok) {
-    console.log(`origin: ${remote.stdout}`);
-    return;
-  }
-
-  const exists = tryRun(gh, ["repo", "view", repo, "--json", "name"]);
-  if (!exists.ok) {
-    console.log(`Creating public repo ${repo}...`);
-    run(gh, [
-      "repo",
-      "create",
-      repo,
-      "--public",
-      "--source=.",
-      "--remote=origin",
-      "--description",
-      pkg.description,
-    ]);
-  } else {
-    run("git", ["remote", "add", "origin", `https://github.com/${repo}.git`]);
-  }
-}
-
-function ensureTag() {
-  const existing = tryRun("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`]);
-  if (existing.ok) {
-    console.log(`Tag ${tag} already exists.`);
-    return;
-  }
-  run("git", ["tag", "-a", tag, "-m", `Release ${tag}`]);
-}
-
 function main() {
   console.log(`Deploying ${pkg.name}@${version}`);
   ensureCleanTree();
   run("npm", ["test"]);
-
-  if (!skipGithub) {
-    const gh = resolveGh();
-    ensureGhAuth(gh);
-    ensureRemote(gh);
-    ensureTag();
-    run("git", ["push", "-u", "origin", "main"]);
-    run("git", ["push", "origin", tag]);
-    console.log(`GitHub: https://github.com/${repo}`);
-  } else {
-    console.log("Skipping GitHub push (--skip-github).");
-  }
 
   if (!skipNpm) {
     ensureNpmAuth();

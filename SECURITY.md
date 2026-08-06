@@ -26,10 +26,7 @@ Images and prompts are not stored by this project beyond the lifetime of a tool 
 
 Please **do not** open a public issue for security problems.
 
-Instead, report privately via one of:
-
-- [GitHub Security Advisories](https://github.com/RimunAce/mcp-six-eyes/security/advisories/new) (preferred)
-- Contact [@RimunAce](https://github.com/RimunAce) or the [npm maintainer page](https://www.npmjs.com/~rimunace)
+Instead, report privately via the [npm maintainer page](https://www.npmjs.com/~rimunace).
 
 Include:
 
