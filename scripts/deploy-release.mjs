@@ -12,7 +12,7 @@
  *   node scripts/deploy-release.mjs --skip-github
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -32,12 +32,17 @@ const ghCandidates = [
   "gh",
 ].filter(Boolean);
 
+function useShell(command) {
+  // Absolute paths (especially with spaces) must not go through cmd.exe.
+  return process.platform === "win32" && !path.isAbsolute(command);
+}
+
 function run(command, commandArgs, options = {}) {
   console.log(`\n> ${command} ${commandArgs.join(" ")}`);
   execFileSync(command, commandArgs, {
     cwd: root,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: useShell(command),
     ...options,
   });
 }
@@ -46,7 +51,7 @@ function tryRun(command, commandArgs) {
   const result = spawnSync(command, commandArgs, {
     cwd: root,
     encoding: "utf8",
-    shell: process.platform === "win32",
+    shell: useShell(command),
   });
   return {
     ok: result.status === 0,
@@ -58,10 +63,13 @@ function tryRun(command, commandArgs) {
 
 function resolveGh() {
   for (const candidate of ghCandidates) {
+    if (path.isAbsolute(candidate) && !existsSync(candidate)) continue;
     const probe = tryRun(candidate, ["--version"]);
     if (probe.ok) return candidate;
   }
-  throw new Error("GitHub CLI (gh) not found. Install it, then re-run.");
+  throw new Error(
+    "GitHub CLI (gh) not found. Install it (winget install GitHub.cli), open a new terminal, then re-run.",
+  );
 }
 
 function ensureCleanTree() {
