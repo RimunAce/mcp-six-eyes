@@ -392,11 +392,20 @@ What `npm run release` does:
 3. Pushes `main` and annotated tag `vX.Y.Z`
 4. Publishes to npm (`publishConfig.access = public`)
 
-Tagged pushes also trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml) when `NPM_TOKEN` is set as a repo secret. For CI publishes:
+Until npm auth is configured on this machine, you can still publish after login:
+
+```bash
+npm login
+npm publish --access public
+```
+
+Tagged pushes also trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml). For automated npm publishes from GitHub Actions:
 
 1. Create an npm automation token on [npmjs.com](https://www.npmjs.com/)
 2. Add repo secret `NPM_TOKEN`
 3. Push a matching tag (`v1.1.0` for package version `1.1.0`)
+
+Without `NPM_TOKEN`, the release workflow still validates the tag and can refresh the GitHub Release notes.
 
 ## Security
 

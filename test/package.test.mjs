@@ -25,8 +25,8 @@ describe("open source package surface", () => {
     assert.ok(pkg.files.includes("build"));
     assert.ok(pkg.files.includes("README.md"));
     assert.ok(pkg.files.includes("LICENSE"));
-    assert.match(pkg.scripts.test, /node --test/);
-    assert.match(pkg.scripts.test, /test\/\*\*\/\*\.test\.mjs/);
+    assert.match(pkg.scripts.test, /scripts\/run-tests\.mjs/);
+    assert.match(pkg.scripts["test:unit"], /scripts\/run-tests\.mjs/);
     assert.ok(pkg.engines?.node);
     assert.match(pkg.engines.node, /20/);
     assert.match(pkg.repository.url, /github\.com\/RimunAce\/mcp-six-eyes/);

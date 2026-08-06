@@ -12,5 +12,6 @@ Thumbs.db
 .idea/
 *.tsbuildinfo
 scripts/tmp-*
+scripts/tmp-*/
 .npm-cache/
 *.tgz

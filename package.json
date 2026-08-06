@@ -4,7 +4,7 @@
   "description": "MCP server that gives text-only AI agents image understanding via vision APIs",
   "type": "module",
   "bin": {
-    "mcp-six-eyes": "./build/index.js"
+    "mcp-six-eyes": "build/index.js"
   },
   "files": [
     "build",
@@ -18,8 +18,8 @@
     "start": "node build/index.js",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test \"test/**/*.test.mjs\"",
-    "test:unit": "node --test \"test/**/*.test.mjs\"",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "test:unit": "node scripts/run-tests.mjs",
     "smoke": "npm run build && node scripts/smoke-load.mjs",
     "release": "node scripts/deploy-release.mjs",
     "prepare": "npm run build",

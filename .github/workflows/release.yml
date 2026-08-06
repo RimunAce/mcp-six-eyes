@@ -12,7 +12,8 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    environment: npm
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,9 +44,14 @@ jobs:
           fi
 
       - name: Publish package
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip npm publish when token missing
+        if: ${{ env.NODE_AUTH_TOKEN == '' }}
+        run: |
+          echo "NPM_TOKEN secret is not configured."
+          echo "Publish locally with: npm login && npm publish --access public"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
