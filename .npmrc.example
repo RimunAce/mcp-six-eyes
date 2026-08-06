@@ -1,0 +1,3 @@
+# Copy to a local user-level npm config, or set NPM_TOKEN in CI secrets.
+# Do not commit real tokens.
+# //registry.npmjs.org/:_authToken=${NPM_TOKEN}
