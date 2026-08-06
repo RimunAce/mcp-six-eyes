@@ -372,6 +372,32 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for PR and coding guidelines.
 - npm: [mcp-six-eyes](https://www.npmjs.com/package/mcp-six-eyes)
 - Maintainer npm: [rimunace](https://www.npmjs.com/~rimunace)
 
+## Release workflow
+
+Maintainer path after local changes:
+
+```bash
+# one-time machine setup
+gh auth login
+npm login
+
+# ship current package.json version
+npm run release
+```
+
+What `npm run release` does:
+
+1. Runs `npm test`
+2. Creates the public GitHub repo if needed (`RimunAce/mcp-six-eyes`)
+3. Pushes `main` and annotated tag `vX.Y.Z`
+4. Publishes to npm (`publishConfig.access = public`)
+
+Tagged pushes also trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml) when `NPM_TOKEN` is set as a repo secret. For CI publishes:
+
+1. Create an npm automation token on [npmjs.com](https://www.npmjs.com/)
+2. Add repo secret `NPM_TOKEN`
+3. Push a matching tag (`v1.1.0` for package version `1.1.0`)
+
 ## Security
 
 - API keys stay in environment variables / client config, never in tool responses

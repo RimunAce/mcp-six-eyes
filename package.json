@@ -21,6 +21,7 @@
     "test": "npm run build && node --test \"test/**/*.test.mjs\"",
     "test:unit": "node --test \"test/**/*.test.mjs\"",
     "smoke": "npm run build && node scripts/smoke-load.mjs",
+    "release": "node scripts/deploy-release.mjs",
     "prepare": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test"
   },

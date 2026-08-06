@@ -83,6 +83,17 @@ npx @modelcontextprotocol/inspector node ./build/index.js
 4. Describe the user-facing impact (tools, env vars, docs)
 5. Keep PRs focused
 
+## Maintainer release
+
+Only maintainers ship versions:
+
+```bash
+gh auth login
+npm login
+# bump version + CHANGELOG first when needed
+npm run release
+```
+
 ## Reporting issues
 
 Include:
