@@ -30,8 +30,9 @@ describe("open source package surface", () => {
     assert.ok(pkg.engines?.node);
     assert.match(pkg.engines.node, /20/);
     assert.match(pkg.homepage, /npmjs\.com\/package\/mcp-six-eyes/);
-    assert.equal(pkg.repository, undefined);
-    assert.equal(pkg.bugs, undefined);
+    assert.match(pkg.repository?.url, /RimunAce\/mcp-six-eyes/);
+    assert.match(pkg.bugs?.url, /RimunAce\/mcp-six-eyes\/issues/);
+    assert.equal(pkg.publishConfig?.registry, "https://registry.npmjs.org");
   });
 
   it("ships MIT license under the current maintainer", async () => {
