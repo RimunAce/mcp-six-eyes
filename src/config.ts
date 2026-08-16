@@ -13,6 +13,7 @@ export interface AppConfig {
   timeoutMs: number;
   maxImageBytes: number;
   maxImages: number;
+  cacheMaxEntries: number;
   fallbackProvider?: VisionProviderName;
   fallbackApiKey?: string;
   fallbackModel?: string;
@@ -33,6 +34,13 @@ function optionalInt(value: string | undefined, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return Math.floor(n);
+}
+
+function cacheMaxEntriesFor(value: string | undefined): number {
+  if (!value) return 200;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) return 200;
+  return n;
 }
 
 function normalizeProvider(raw: string | undefined): VisionProviderName {
@@ -142,6 +150,7 @@ export function loadConfig(): AppConfig {
       20 * 1024 * 1024,
     ),
     maxImages: optionalInt(process.env.VISION_MAX_IMAGES, 10),
+    cacheMaxEntries: cacheMaxEntriesFor(process.env.VISION_CACHE_MAX_ENTRIES),
   };
 
   if (fallbackRaw) {

@@ -24,6 +24,8 @@ export interface VisionResult {
   text: string;
   provider: string;
   model: string;
+  /** True when the result was served from the in-memory response cache. */
+  cached?: boolean;
 }
 
 export interface VisionProvider {

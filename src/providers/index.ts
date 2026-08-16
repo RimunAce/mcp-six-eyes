@@ -1,4 +1,5 @@
 import type { AppConfig, VisionProviderName } from "../config.js";
+import { VisionCache } from "../cache.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { GoogleProvider } from "./google.js";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
@@ -65,8 +66,10 @@ function createProvider(options: {
 export class VisionRouter {
   private readonly primary: VisionProvider;
   private readonly fallback?: VisionProvider;
+  private readonly cache: VisionCache;
 
   constructor(config: AppConfig) {
+    this.cache = new VisionCache(config.cacheMaxEntries ?? 200);
     this.primary = createProvider({
       name: config.provider,
       apiKey: config.apiKey,
@@ -96,8 +99,20 @@ export class VisionRouter {
   }
 
   async analyze(request: VisionRequest): Promise<VisionResult> {
+    const key = this.cache.enabled ? this.cache.key(request) : undefined;
+    if (key !== undefined) {
+      const hit = this.cache.get(key);
+      if (hit) {
+        return { ...hit, cached: true };
+      }
+    }
+
     try {
-      return await this.primary.analyze(request);
+      const result = await this.primary.analyze(request);
+      if (key !== undefined) {
+        this.cache.set(key, result);
+      }
+      return result;
     } catch (primaryError) {
       if (!this.fallback) throw primaryError;
       try {

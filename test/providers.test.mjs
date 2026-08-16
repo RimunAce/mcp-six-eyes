@@ -331,4 +331,169 @@ describe("VisionRouter", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("caches identical requests and flags the hit", async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return jsonResponse({
+        choices: [{ message: { content: "cached result" } }],
+      });
+    };
+
+    try {
+      const router = new VisionRouter({
+        provider: "openai",
+        apiKey: "sk-primary",
+        model: "gpt-4o-mini",
+        timeoutMs: 5_000,
+        maxImageBytes: 1_000_000,
+        maxImages: 10,
+        cacheMaxEntries: 200,
+      });
+
+      const request = {
+        task: "describe",
+        prompt: "describe it",
+        images: [labeledFixture()],
+      };
+      const first = await router.analyze(request);
+      const second = await router.analyze(request);
+
+      assert.equal(calls, 1);
+      assert.equal(first.cached, undefined);
+      assert.equal(second.cached, true);
+      assert.equal(second.text, "cached result");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("misses the cache when the prompt changes", async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return jsonResponse({
+        choices: [{ message: { content: "ok" } }],
+      });
+    };
+
+    try {
+      const router = new VisionRouter({
+        provider: "openai",
+        apiKey: "sk-primary",
+        model: "gpt-4o-mini",
+        timeoutMs: 5_000,
+        maxImageBytes: 1_000_000,
+        maxImages: 10,
+        cacheMaxEntries: 200,
+      });
+
+      const images = [labeledFixture()];
+      await router.analyze({ task: "describe", prompt: "one", images });
+      const second = await router.analyze({
+        task: "describe",
+        prompt: "two",
+        images,
+      });
+
+      assert.equal(calls, 2);
+      assert.equal(second.cached, undefined);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("disables caching at maxEntries 0", async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return jsonResponse({
+        choices: [{ message: { content: "ok" } }],
+      });
+    };
+
+    try {
+      const router = new VisionRouter({
+        provider: "openai",
+        apiKey: "sk-primary",
+        model: "gpt-4o-mini",
+        timeoutMs: 5_000,
+        maxImageBytes: 1_000_000,
+        maxImages: 10,
+        cacheMaxEntries: 0,
+      });
+
+      const request = {
+        task: "describe",
+        prompt: "x",
+        images: [labeledFixture()],
+      };
+      await router.analyze(request);
+      const second = await router.analyze(request);
+
+      assert.equal(calls, 2);
+      assert.equal(second.cached, undefined);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not cache fallback results", async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      calls += 1;
+      if (String(url).includes("openai.com")) {
+        return jsonResponse({ error: { message: "primary down" } }, 500);
+      }
+      return jsonResponse({
+        content: [{ type: "text", text: "fallback ok" }],
+      });
+    };
+
+    try {
+      const router = new VisionRouter({
+        provider: "openai",
+        apiKey: "sk-primary",
+        model: "gpt-4o-mini",
+        baseUrl: "https://api.openai.com/v1",
+        timeoutMs: 5_000,
+        maxImageBytes: 1_000_000,
+        maxImages: 10,
+        cacheMaxEntries: 200,
+        fallbackProvider: "anthropic",
+        fallbackApiKey: "sk-ant",
+        fallbackModel: "claude-sonnet-4-5",
+      });
+
+      const request = {
+        task: "describe",
+        prompt: "x",
+        images: [labeledFixture()],
+      };
+      const first = await router.analyze(request);
+      assert.match(first.text, /fallback ok/);
+      assert.equal(first.cached, undefined);
+      assert.equal(calls, 2);
+
+      // Primary recovers: the same request must hit primary again, not the
+      // cached fallback result.
+      globalThis.fetch = async () => {
+        calls += 1;
+        return jsonResponse({
+          choices: [{ message: { content: "primary recovered" } }],
+        });
+      };
+      const second = await router.analyze(request);
+      assert.equal(second.text, "primary recovered");
+      assert.equal(second.cached, undefined);
+      assert.equal(calls, 3);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

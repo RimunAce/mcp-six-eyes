@@ -33,6 +33,7 @@ src/
   config.ts                env/provider config
   image.ts                 path/URL/base64 loader + labels
   prompts.ts               task prompts
+  cache.ts                 content-addressed response cache
   providers/               vision backends + router
 test/                      Node.js built-in test suite
 ```

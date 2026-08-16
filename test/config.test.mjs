@@ -12,6 +12,7 @@ const CLEAR_VISION_ENV = {
   VISION_TIMEOUT_MS: undefined,
   VISION_MAX_IMAGE_BYTES: undefined,
   VISION_MAX_IMAGES: undefined,
+  VISION_CACHE_MAX_ENTRIES: undefined,
   VISION_FALLBACK_PROVIDER: undefined,
   VISION_FALLBACK_MODEL: undefined,
   VISION_FALLBACK_BASE_URL: undefined,
@@ -159,6 +160,55 @@ describe("loadConfig", () => {
       },
       () => {
         assert.throws(() => loadConfig(), /OPENAI_API_KEY/);
+      },
+    );
+  });
+
+  it("defaults the response cache to 200 entries", () => {
+    withEnv(
+      {
+        ...CLEAR_VISION_ENV,
+        VISION_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-openai",
+      },
+      () => {
+        assert.equal(loadConfig().cacheMaxEntries, 200);
+      },
+    );
+  });
+
+  it("parses and disables VISION_CACHE_MAX_ENTRIES", () => {
+    withEnv(
+      {
+        ...CLEAR_VISION_ENV,
+        VISION_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-openai",
+        VISION_CACHE_MAX_ENTRIES: "42",
+      },
+      () => {
+        assert.equal(loadConfig().cacheMaxEntries, 42);
+      },
+    );
+    withEnv(
+      {
+        ...CLEAR_VISION_ENV,
+        VISION_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-openai",
+        VISION_CACHE_MAX_ENTRIES: "0",
+      },
+      () => {
+        assert.equal(loadConfig().cacheMaxEntries, 0);
+      },
+    );
+    withEnv(
+      {
+        ...CLEAR_VISION_ENV,
+        VISION_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-openai",
+        VISION_CACHE_MAX_ENTRIES: "nope",
+      },
+      () => {
+        assert.equal(loadConfig().cacheMaxEntries, 200);
       },
     );
   });

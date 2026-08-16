@@ -190,9 +190,20 @@ Optional model / limits:
 VISION_MODEL=gpt-4o-mini
 VISION_MAX_IMAGES=10
 VISION_MAX_IMAGE_BYTES=20971520
+VISION_CACHE_MAX_ENTRIES=200
 ```
 
 The server speaks MCP over **stdio**. Do not write application logs to stdout.
+
+## Caching
+
+Vision calls are memoized by content, in memory. The cache key hashes the actual image bytes plus the task, prompt, labels, and token cap (not the source string), so a model that re-calls `describe_image` (or any vision tool) on the same image gets the previous answer back instantly, marked `Cached: yes`, without re-billing the vision API.
+
+- Default: `VISION_CACHE_MAX_ENTRIES=200` (bounded, oldest evicted first)
+- Set `VISION_CACHE_MAX_ENTRIES=0` to disable
+- First answer wins for a given key; a changed file or URL produces a new key
+- Failed and fallback responses are never cached
+- Cache lives only for the process lifetime (no disk persistence)
 
 ## Client notes
 
@@ -385,6 +396,7 @@ npm run release
 - Remote URL fetches are explicit tool inputs; treat untrusted URLs carefully
 - Large images are rejected via `VISION_MAX_IMAGE_BYTES` (default 20MB)
 - Image count per call is capped via `VISION_MAX_IMAGES` (default 10)
+- The response cache holds only content hashes and result text in memory; nothing is persisted to disk
 
 Full policy: [SECURITY.md](./SECURITY.md).
 

@@ -26,6 +26,7 @@ function formatResult(meta: {
   provider: string;
   model: string;
   text: string;
+  cached?: boolean;
 }): string {
   const imageLines =
     meta.images.length === 1
@@ -48,6 +49,7 @@ function formatResult(meta: {
     ...imageLines,
     `- Provider: ${meta.provider}`,
     `- Model: ${meta.model}`,
+    ...(meta.cached ? ["- Cached: yes"] : []),
     "",
     meta.text,
   ].join("\n");
@@ -172,6 +174,7 @@ async function main() {
           provider: result.provider,
           model: result.model,
           text: result.text,
+          cached: result.cached,
         }),
       );
     } catch (error) {
@@ -397,6 +400,9 @@ async function main() {
           `Timeout: ${config.timeoutMs}ms`,
           `Max image bytes: ${config.maxImageBytes}`,
           `Max images per call: ${config.maxImages}`,
+          config.cacheMaxEntries > 0
+            ? `Cache: ${config.cacheMaxEntries} entries`
+            : "Cache: disabled",
           "",
           "Tools: analyze_image, describe_image, ocr_image, compare_images, refer_images, inspect_ui, read_chart, explain_diagram, extract_from_images, vision_status",
         ].join("\n"),
