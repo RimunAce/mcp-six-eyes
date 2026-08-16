@@ -92,6 +92,7 @@ describe("open source package surface", () => {
     assert.match(ci, /npm test/);
     assert.match(ci, /npm pack --dry-run/);
     assert.match(release, /npm publish --access public/);
-    assert.match(release, /secrets\.NPM_TOKEN/);
+    assert.match(release, /id-token: write/);
+    assert.doesNotMatch(release, /NPM_TOKEN|secrets\.NPM_TOKEN/);
   });
 });
