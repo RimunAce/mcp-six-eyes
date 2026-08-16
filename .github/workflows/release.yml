@@ -7,13 +7,12 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,6 +23,9 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm (trusted publishing needs >= 11.5.1)
+        run: npm install -g npm@11
 
       - name: Install dependencies
         run: npm ci
@@ -43,15 +45,8 @@ jobs:
             exit 1
           fi
 
-      - name: Publish package
-        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+      - name: Publish to npm (OIDC trusted publishing)
         run: npm publish --access public
-
-      - name: Skip npm publish when token missing
-        if: ${{ env.NODE_AUTH_TOKEN == '' }}
-        run: |
-          echo "NPM_TOKEN secret is not configured."
-          echo "Publish locally with: npm login && npm publish --access public"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
