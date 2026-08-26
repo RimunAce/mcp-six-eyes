@@ -4,14 +4,18 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 
 import { loadConfig, type AppConfig } from "./config.js";
+import { completeExtract, EXTRACT_REPAIR_PROMPT } from "./extract.js";
 import {
   loadLabeledImages,
   normalizeImageInputs,
+  type ImageDetail,
   type ImageInput,
 } from "./image.js";
 import { buildPrompt } from "./prompts.js";
 import { VisionRouter } from "./providers/index.js";
 import type { VisionTask } from "./providers/types.js";
+import { formatVisionStatus } from "./status.js";
+import { VERSION } from "./version.js";
 
 function textResult(text: string, isError = false) {
   return {
@@ -100,6 +104,13 @@ const schemaField = z
     'Optional JSON schema or field list for structured extraction, e.g. {"title":string,"total":number}',
   );
 
+const detailField = z
+  .enum(["auto", "low", "original"])
+  .optional()
+  .describe(
+    "Image fidelity sent to the vision API. auto (default) downscales longest edge to VISION_MAX_IMAGE_EDGE (2048). low uses 512. original skips resize but still respects VISION_MAX_IMAGE_BYTES.",
+  );
+
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -107,6 +118,11 @@ function asOptionalString(value: unknown): string | undefined {
 function parseImagesArg(value: unknown): Array<string | ImageInput> | undefined {
   if (!Array.isArray(value)) return undefined;
   return value as Array<string | ImageInput>;
+}
+
+function asOptionalDetail(value: unknown): ImageDetail | undefined {
+  if (value === "auto" || value === "low" || value === "original") return value;
+  return undefined;
 }
 
 async function main() {
@@ -122,7 +138,7 @@ async function main() {
   const vision = new VisionRouter(config);
   const server = new McpServer({
     name: "mcp-six-eyes",
-    version: "1.1.0",
+    version: VERSION,
   });
 
   async function runVisionTool(args: {
@@ -134,6 +150,7 @@ async function main() {
     task: VisionTask;
     minImages?: number;
     maxTokens?: number;
+    detail?: ImageDetail;
   }) {
     try {
       const inputs = normalizeImageInputs({
@@ -152,16 +169,36 @@ async function main() {
         maxImageBytes: config.maxImageBytes,
         maxImages: config.maxImages,
         timeoutMs: config.timeoutMs,
+        allowedRoots: config.allowedRoots,
+        blockPrivateUrls: config.blockPrivateUrls,
+        detail: args.detail ?? "auto",
+        maxImageEdge: config.maxImageEdge,
       });
 
-      const result = await vision.analyze({
+      const prompt = buildPrompt(args.task, loaded, args.prompt, {
+        schema: args.schema,
+      });
+      let result = await vision.analyze({
         images: loaded,
         task: args.task,
-        prompt: buildPrompt(args.task, loaded, args.prompt, {
-          schema: args.schema,
-        }),
+        prompt,
         maxTokens: args.maxTokens,
       });
+
+      if (args.task === "extract") {
+        const completed = await completeExtract(result, () =>
+          vision.analyze({
+            images: loaded,
+            task: args.task,
+            prompt: `${prompt}\n${EXTRACT_REPAIR_PROMPT}`,
+            maxTokens: args.maxTokens,
+          }),
+        );
+        if (!completed.ok) {
+          return textResult(completed.message, true);
+        }
+        result = completed.result;
+      }
 
       return textResult(
         formatResult({
@@ -189,12 +226,14 @@ async function main() {
     mimeType: mimeTypeField,
     images: imagesField.optional(),
     prompt: promptField,
+    detail: detailField,
   };
 
   const multiPreferredSchema = {
     images: imagesField,
     image: imageField.optional(),
     mimeType: mimeTypeField,
+    detail: detailField,
     prompt: z
       .string()
       .optional()
@@ -224,6 +263,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "analyze",
       }),
   );
@@ -241,6 +281,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "describe",
       }),
   );
@@ -258,6 +299,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "ocr",
       }),
   );
@@ -275,6 +317,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "compare",
         minImages: 2,
       }),
@@ -289,6 +332,7 @@ async function main() {
         images: imagesField,
         image: imageField.optional(),
         mimeType: mimeTypeField,
+        detail: detailField,
         prompt: z
           .string()
           .describe(
@@ -302,6 +346,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "refer",
       }),
   );
@@ -319,6 +364,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "ui",
       }),
   );
@@ -336,6 +382,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "chart",
       }),
   );
@@ -353,6 +400,7 @@ async function main() {
         mimeType: asOptionalString(args.mimeType),
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
+        detail: asOptionalDetail(args.detail),
         task: "diagram",
       }),
   );
@@ -378,6 +426,7 @@ async function main() {
         images: parseImagesArg(args.images),
         prompt: asOptionalString(args.prompt),
         schema: asOptionalString(args.schema),
+        detail: asOptionalDetail(args.detail),
         task: "extract",
         maxTokens: 3072,
       }),
@@ -390,24 +439,7 @@ async function main() {
         "Show which vision provider/model this MCP server is configured to use, plus image limits.",
       inputSchema: {},
     },
-    async () => {
-      const info = vision.info;
-      return textResult(
-        [
-          "mcp-six-eyes is ready.",
-          `Primary: ${info.primary}`,
-          info.fallback ? `Fallback: ${info.fallback}` : "Fallback: none",
-          `Timeout: ${config.timeoutMs}ms`,
-          `Max image bytes: ${config.maxImageBytes}`,
-          `Max images per call: ${config.maxImages}`,
-          config.cacheMaxEntries > 0
-            ? `Cache: ${config.cacheMaxEntries} entries`
-            : "Cache: disabled",
-          "",
-          "Tools: analyze_image, describe_image, ocr_image, compare_images, refer_images, inspect_ui, read_chart, explain_diagram, extract_from_images, vision_status",
-        ].join("\n"),
-      );
-    },
+    async () => textResult(formatVisionStatus(config, vision.info)),
   );
 
   const transport = new StdioServerTransport();

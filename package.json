@@ -1,6 +1,6 @@
 {
   "name": "mcp-six-eyes",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "MCP server that gives text-only AI agents image understanding via vision APIs",
   "type": "module",
   "bin": {

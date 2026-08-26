@@ -13,6 +13,10 @@ const CLEAR_VISION_ENV = {
   VISION_MAX_IMAGE_BYTES: undefined,
   VISION_MAX_IMAGES: undefined,
   VISION_CACHE_MAX_ENTRIES: undefined,
+  VISION_BLOCK_PRIVATE_URLS: undefined,
+  VISION_ALLOWED_ROOTS: undefined,
+  VISION_MAX_IMAGE_EDGE: undefined,
+  VISION_RETRY_MAX_ATTEMPTS: undefined,
   VISION_FALLBACK_PROVIDER: undefined,
   VISION_FALLBACK_MODEL: undefined,
   VISION_FALLBACK_BASE_URL: undefined,
@@ -46,6 +50,33 @@ describe("loadConfig", () => {
         assert.equal(config.maxImageBytes, 20 * 1024 * 1024);
         assert.equal(config.maxImages, 10);
         assert.equal(config.fallbackProvider, undefined);
+        assert.equal(config.blockPrivateUrls, true);
+        assert.equal(config.allowedRootsIsDefault, true);
+        assert.equal(config.maxImageEdge, 2048);
+        assert.equal(config.retryMaxAttempts, 3);
+        assert.ok((config.allowedRoots ?? []).length >= 1);
+      },
+    );
+  });
+
+  it("parses security and retry overrides", () => {
+    withEnv(
+      {
+        ...CLEAR_VISION_ENV,
+        VISION_PROVIDER: "openai",
+        OPENAI_API_KEY: "sk-test-openai",
+        VISION_BLOCK_PRIVATE_URLS: "false",
+        VISION_MAX_IMAGE_EDGE: "1024",
+        VISION_RETRY_MAX_ATTEMPTS: "5",
+        VISION_ALLOWED_ROOTS: "/tmp,/var/tmp",
+      },
+      () => {
+        const config = loadConfig();
+        assert.equal(config.blockPrivateUrls, false);
+        assert.equal(config.maxImageEdge, 1024);
+        assert.equal(config.retryMaxAttempts, 5);
+        assert.equal(config.allowedRootsIsDefault, false);
+        assert.ok((config.allowedRoots ?? []).some((root) => root.includes("tmp")));
       },
     );
   });

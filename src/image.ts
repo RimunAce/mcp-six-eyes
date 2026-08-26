@@ -2,6 +2,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { defaultAllowedRoots, resolveSandboxedPath } from "./sandbox.js";
+import { fetchPublicUrl, type HostLookup } from "./ssrf.js";
+import {
+  preprocessLoadedImage,
+  type ImageDetail,
+} from "./resize.js";
+
+export type { ImageDetail };
+
 export interface LoadedImage {
   bytes: Buffer;
   mimeType: string;
@@ -137,6 +146,9 @@ export async function loadImageFromSource(
     maxImageBytes: number;
     mimeType?: string;
     timeoutMs?: number;
+    allowedRoots?: string[];
+    blockPrivateUrls?: boolean;
+    lookup?: HostLookup;
   },
 ): Promise<LoadedImage> {
   const input = source.trim();
@@ -170,39 +182,34 @@ export async function loadImageFromSource(
   }
 
   if (/^https?:\/\//i.test(input)) {
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      options.timeoutMs ?? 60_000,
-    );
-    try {
-      const response = await fetch(input, {
-        signal: controller.signal,
-        headers: { Accept: "image/*,*/*" },
-      });
-      if (!response.ok) {
-        throw new Error(
-          `Failed to download image (${response.status} ${response.statusText}): ${input}`,
-        );
-      }
-      const contentType = response.headers
-        .get("content-type")
-        ?.split(";")[0]
-        ?.trim();
-      const arrayBuffer = await response.arrayBuffer();
-      const bytes = Buffer.from(arrayBuffer);
-      return toLoaded(
-        bytes,
-        options.mimeType ?? contentType ?? "application/octet-stream",
-        input,
-        options.maxImageBytes,
+    const response = await fetchPublicUrl(input, {
+      timeoutMs: options.timeoutMs ?? 60_000,
+      blockPrivateUrls: options.blockPrivateUrls !== false,
+      lookup: options.lookup,
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download image (${response.status} ${response.statusText}).`,
       );
-    } finally {
-      clearTimeout(timer);
     }
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";")[0]
+      ?.trim();
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = Buffer.from(arrayBuffer);
+    return toLoaded(
+      bytes,
+      options.mimeType ?? contentType ?? "application/octet-stream",
+      input,
+      options.maxImageBytes,
+    );
   }
 
-  const filePath = resolveLocalPath(input);
+  const filePath = await resolveSandboxedPath(
+    resolveLocalPath(input),
+    options.allowedRoots ?? defaultAllowedRoots(),
+  );
   const bytes = await readFile(filePath);
   return toLoaded(
     bytes,
@@ -264,6 +271,12 @@ export async function loadLabeledImages(
     maxImageBytes: number;
     maxImages: number;
     timeoutMs?: number;
+    allowedRoots?: string[];
+    blockPrivateUrls?: boolean;
+    lookup?: HostLookup;
+    concurrency?: number;
+    detail?: ImageDetail;
+    maxImageEdge?: number;
   },
 ): Promise<LabeledImage[]> {
   if (inputs.length === 0) {
@@ -275,24 +288,37 @@ export async function loadLabeledImages(
     );
   }
 
-  const usedLabels = new Set<string>();
-  const loaded: LabeledImage[] = [];
-
-  for (let i = 0; i < inputs.length; i++) {
-    const input = inputs[i];
-    const image = await loadImageFromSource(input.source, {
+  const labels = uniqueLabels(inputs);
+  const images = await mapLimit(inputs, options.concurrency ?? 4, (input) =>
+    loadImageFromSource(input.source, {
       maxImageBytes: options.maxImageBytes,
       mimeType: input.mimeType,
       timeoutMs: options.timeoutMs,
-    });
+      allowedRoots: options.allowedRoots,
+      blockPrivateUrls: options.blockPrivateUrls,
+      lookup: options.lookup,
+    }),
+  );
 
+  const detail = options.detail ?? "auto";
+  return images.map((image, i) => {
+    const prepared = preprocessLoadedImage(image, {
+      detail,
+      maxEdge: options.maxImageEdge ?? 2048,
+      maxImageBytes: options.maxImageBytes,
+    });
+    return { ...prepared, label: labels[i] };
+  });
+}
+
+function uniqueLabels(inputs: ImageInput[]): string[] {
+  const usedLabels = new Set<string>();
+  return inputs.map((input, i) => {
     let label = (input.label?.trim() || defaultLabel(i)).replace(
       /^image\s+/i,
       "",
     );
     if (!label) label = defaultLabel(i);
-
-    // Keep labels unique so "refer to image 2" stays unambiguous.
     let unique = label;
     let suffix = 2;
     while (usedLabels.has(unique.toLowerCase())) {
@@ -300,11 +326,29 @@ export async function loadLabeledImages(
       suffix += 1;
     }
     usedLabels.add(unique.toLowerCase());
+    return unique;
+  });
+}
 
-    loaded.push({ ...image, label: unique });
-  }
-
-  return loaded;
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, limit), items.length) },
+    async () => {
+      while (next < items.length) {
+        const index = next;
+        next += 1;
+        results[index] = await fn(items[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 export function formatImageInventory(images: LabeledImage[]): string {

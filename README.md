@@ -59,6 +59,8 @@ Every image tool accepts:
 
 Labels default to `"1"`, `"2"`, … so agent prompts like “compare image 1 and 2” map cleanly. Custom labels work too (`"before"`, `"after"`, `"fig-a"`).
 
+Optional `detail`: `auto` (default, longest edge ≤ `VISION_MAX_IMAGE_EDGE`), `low` (≤ 512), or `original` (no resize; still respects `VISION_MAX_IMAGE_BYTES`).
+
 ```text
 # one image
 analyze_image({ image: "./shot.png", prompt: "What failed?" })
@@ -190,10 +192,19 @@ Optional model / limits:
 VISION_MODEL=gpt-4o-mini
 VISION_MAX_IMAGES=10
 VISION_MAX_IMAGE_BYTES=20971520
+VISION_MAX_IMAGE_EDGE=2048
 VISION_CACHE_MAX_ENTRIES=200
+VISION_RETRY_MAX_ATTEMPTS=3
+VISION_BLOCK_PRIVATE_URLS=true
+# VISION_ALLOWED_ROOTS=          # unset = cwd + temp. Colon/semicolon/comma-separated.
+# VISION_BLOCK_PRIVATE_URLS=false  # only for a local-dev image server (localhost / LAN)
 ```
 
 The server speaks MCP over **stdio**. Do not write application logs to stdout.
+
+`VISION_BLOCK_PRIVATE_URLS` defaults to `true` and rejects localhost, loopback, link-local, private IPv4/IPv6, and cloud metadata hosts, including after redirects. Set it to `false` only if you need to fetch from a local-dev image server such as `http://127.0.0.1:3000/uploads/x.png`.
+
+`VISION_ALLOWED_ROOTS` limits local path and `file://` reads. Unset uses `process.cwd()` plus the system temp directory (typical agent uploads). Separate entries with `;`, `,`, or `:` (Windows drive letters like `C:\data` are kept intact).
 
 ## Caching
 
@@ -202,7 +213,7 @@ Vision calls are memoized by content, in memory. The cache key hashes the actual
 - Default: `VISION_CACHE_MAX_ENTRIES=200` (bounded, oldest evicted first)
 - Set `VISION_CACHE_MAX_ENTRIES=0` to disable
 - First answer wins for a given key; a changed file or URL produces a new key
-- Failed and fallback responses are never cached
+- Failed and fallback responses are never cached (so a later retry can still use a recovered primary)
 - Cache lives only for the process lifetime (no disk persistence)
 
 ## Client notes
@@ -393,9 +404,11 @@ npm run release
 ## Security
 
 - API keys stay in environment variables / client config, never in tool responses
-- Remote URL fetches are explicit tool inputs; treat untrusted URLs carefully
+- Remote URL fetches are explicit tool inputs; private/metadata URLs are blocked by default (`VISION_BLOCK_PRIVATE_URLS`)
+- Local paths and `file://` URIs are limited to `VISION_ALLOWED_ROOTS` (cwd + temp when unset)
 - Large images are rejected via `VISION_MAX_IMAGE_BYTES` (default 20MB)
 - Image count per call is capped via `VISION_MAX_IMAGES` (default 10)
+- `detail=auto` downscales PNG longest edge to `VISION_MAX_IMAGE_EDGE` (default 2048) before upload
 - The response cache holds only content hashes and result text in memory; nothing is persisted to disk
 
 Full policy: [SECURITY.md](./SECURITY.md).

@@ -13,6 +13,7 @@ function createProvider(options: {
   model: string;
   baseUrl?: string;
   timeoutMs: number;
+  retryMaxAttempts?: number;
 }): VisionProvider {
   switch (options.name) {
     case "openai":
@@ -22,6 +23,7 @@ function createProvider(options: {
         model: options.model,
         baseUrl: options.baseUrl ?? "https://api.openai.com/v1",
         timeoutMs: options.timeoutMs,
+        retryMaxAttempts: options.retryMaxAttempts,
       });
     case "openrouter":
       return new OpenAICompatibleProvider({
@@ -30,6 +32,7 @@ function createProvider(options: {
         model: options.model,
         baseUrl: options.baseUrl ?? "https://openrouter.ai/api/v1",
         timeoutMs: options.timeoutMs,
+        retryMaxAttempts: options.retryMaxAttempts,
         extraHeaders: {
           "HTTP-Referer": "https://www.npmjs.com/package/mcp-six-eyes",
           "X-Title": "mcp-six-eyes",
@@ -45,6 +48,7 @@ function createProvider(options: {
         model: options.model,
         baseUrl: options.baseUrl,
         timeoutMs: options.timeoutMs,
+        retryMaxAttempts: options.retryMaxAttempts,
       });
     case "anthropic":
       return new AnthropicProvider({
@@ -52,6 +56,7 @@ function createProvider(options: {
         model: options.model,
         timeoutMs: options.timeoutMs,
         baseUrl: options.baseUrl,
+        retryMaxAttempts: options.retryMaxAttempts,
       });
     case "google":
       return new GoogleProvider({
@@ -59,6 +64,7 @@ function createProvider(options: {
         model: options.model,
         timeoutMs: options.timeoutMs,
         baseUrl: options.baseUrl,
+        retryMaxAttempts: options.retryMaxAttempts,
       });
   }
 }
@@ -76,6 +82,7 @@ export class VisionRouter {
       model: config.model,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
+      retryMaxAttempts: config.retryMaxAttempts,
     });
 
     if (config.fallbackProvider && config.fallbackApiKey) {
@@ -85,6 +92,7 @@ export class VisionRouter {
         model: config.fallbackModel ?? config.model,
         baseUrl: config.fallbackBaseUrl,
         timeoutMs: config.timeoutMs,
+        retryMaxAttempts: config.retryMaxAttempts,
       });
     }
   }
@@ -117,6 +125,7 @@ export class VisionRouter {
       if (!this.fallback) throw primaryError;
       try {
         const result = await this.fallback.analyze(request);
+        // Do not cache fallback hits: a later retry should still try primary.
         return {
           ...result,
           text: `${result.text}\n\n(Note: primary provider failed; used fallback ${result.provider}/${result.model}.)`,

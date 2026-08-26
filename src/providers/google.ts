@@ -1,3 +1,4 @@
+import { fetchWithRetry } from "../http.js";
 import type { VisionProvider, VisionRequest, VisionResult } from "./types.js";
 
 interface GoogleOptions {
@@ -5,6 +6,7 @@ interface GoogleOptions {
   model: string;
   timeoutMs: number;
   baseUrl?: string;
+  retryMaxAttempts?: number;
 }
 
 interface GoogleResponse {
@@ -22,6 +24,7 @@ export class GoogleProvider implements VisionProvider {
   private readonly apiKey: string;
   private readonly timeoutMs: number;
   private readonly baseUrl: string;
+  private readonly retryMaxAttempts?: number;
 
   constructor(options: GoogleOptions) {
     this.apiKey = options.apiKey;
@@ -30,6 +33,7 @@ export class GoogleProvider implements VisionProvider {
     this.baseUrl = (
       options.baseUrl ?? "https://generativelanguage.googleapis.com/v1beta"
     ).replace(/\/$/, "");
+    this.retryMaxAttempts = options.retryMaxAttempts;
   }
 
   async analyze(request: VisionRequest): Promise<VisionResult> {
@@ -37,31 +41,29 @@ export class GoogleProvider implements VisionProvider {
       throw new Error("At least one image is required.");
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    const url = `${this.baseUrl}/models/${encodeURIComponent(this.model)}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    const url = `${this.baseUrl}/models/${encodeURIComponent(this.model)}:generateContent`;
+    const parts: Array<Record<string, unknown>> = [{ text: request.prompt }];
 
-    try {
-      const parts: Array<Record<string, unknown>> = [
-        { text: request.prompt },
-      ];
-
-      for (const image of request.images) {
-        if (request.images.length > 1) {
-          parts.push({ text: `Image ${image.label}:` });
-        }
-        parts.push({
-          inline_data: {
-            mime_type: image.mimeType,
-            data: image.base64,
-          },
-        });
+    for (const image of request.images) {
+      if (request.images.length > 1) {
+        parts.push({ text: `Image ${image.label}:` });
       }
+      parts.push({
+        inline_data: {
+          mime_type: image.mimeType,
+          data: image.base64,
+        },
+      });
+    }
 
-      const response = await fetch(url, {
+    const response = await fetchWithRetry(
+      url,
+      {
         method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": this.apiKey,
+        },
         body: JSON.stringify({
           contents: [
             {
@@ -73,27 +75,26 @@ export class GoogleProvider implements VisionProvider {
             maxOutputTokens: request.maxTokens ?? 2048,
           },
         }),
-      });
+      },
+      { timeoutMs: this.timeoutMs, maxAttempts: this.retryMaxAttempts },
+    );
 
-      const payload = (await response.json()) as GoogleResponse;
-      if (!response.ok) {
-        throw new Error(
-          payload.error?.message || `Google API error (${response.status})`,
-        );
-      }
-
-      const text = (payload.candidates?.[0]?.content?.parts ?? [])
-        .map((part) => part.text ?? "")
-        .join("")
-        .trim();
-
-      if (!text) {
-        throw new Error("Google returned an empty vision response.");
-      }
-
-      return { text, provider: this.name, model: this.model };
-    } finally {
-      clearTimeout(timer);
+    const payload = (await response.json()) as GoogleResponse;
+    if (!response.ok) {
+      throw new Error(
+        payload.error?.message || `Google API error (${response.status})`,
+      );
     }
+
+    const text = (payload.candidates?.[0]?.content?.parts ?? [])
+      .map((part) => part.text ?? "")
+      .join("")
+      .trim();
+
+    if (!text) {
+      throw new Error("Google returned an empty vision response.");
+    }
+
+    return { text, provider: this.name, model: this.model };
   }
 }

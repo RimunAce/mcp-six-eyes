@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 
+import { VERSION } from "../build/version.js";
+
 const root = path.resolve(".");
 
 async function readJson(rel) {
@@ -33,6 +35,7 @@ describe("open source package surface", () => {
     assert.match(pkg.repository?.url, /RimunAce\/mcp-six-eyes/);
     assert.match(pkg.bugs?.url, /RimunAce\/mcp-six-eyes\/issues/);
     assert.equal(pkg.publishConfig?.registry, "https://registry.npmjs.org");
+    assert.equal(VERSION, pkg.version);
   });
 
   it("ships MIT license under the current maintainer", async () => {

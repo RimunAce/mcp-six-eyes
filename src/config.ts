@@ -1,3 +1,6 @@
+import { parseAllowedRoots } from "./sandbox.js";
+import { DEFAULT_RETRY_MAX_ATTEMPTS } from "./http.js";
+
 export type VisionProviderName =
   | "openai"
   | "anthropic"
@@ -18,6 +21,11 @@ export interface AppConfig {
   fallbackApiKey?: string;
   fallbackModel?: string;
   fallbackBaseUrl?: string;
+  blockPrivateUrls?: boolean;
+  allowedRoots?: string[];
+  allowedRootsIsDefault?: boolean;
+  maxImageEdge?: number;
+  retryMaxAttempts?: number;
 }
 
 function required(name: string, value: string | undefined): string {
@@ -41,6 +49,18 @@ function cacheMaxEntriesFor(value: string | undefined): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0) return 200;
   return n;
+}
+
+function optionalBool(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined || value.trim() === "") return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  return fallback;
 }
 
 function normalizeProvider(raw: string | undefined): VisionProviderName {
@@ -139,6 +159,7 @@ export function loadConfig(): AppConfig {
   const provider = normalizeProvider(process.env.VISION_PROVIDER);
   const fallbackRaw = process.env.VISION_FALLBACK_PROVIDER?.trim();
 
+  const roots = parseAllowedRoots(process.env.VISION_ALLOWED_ROOTS);
   const config: AppConfig = {
     provider,
     apiKey: apiKeyFor(provider),
@@ -151,6 +172,14 @@ export function loadConfig(): AppConfig {
     ),
     maxImages: optionalInt(process.env.VISION_MAX_IMAGES, 10),
     cacheMaxEntries: cacheMaxEntriesFor(process.env.VISION_CACHE_MAX_ENTRIES),
+    blockPrivateUrls: optionalBool(process.env.VISION_BLOCK_PRIVATE_URLS, true),
+    allowedRoots: roots.roots,
+    allowedRootsIsDefault: roots.isDefault,
+    maxImageEdge: optionalInt(process.env.VISION_MAX_IMAGE_EDGE, 2048),
+    retryMaxAttempts: optionalInt(
+      process.env.VISION_RETRY_MAX_ATTEMPTS,
+      DEFAULT_RETRY_MAX_ATTEMPTS,
+    ),
   };
 
   if (fallbackRaw) {

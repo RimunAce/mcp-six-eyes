@@ -98,3 +98,14 @@ export function binaryResponse(bytes, contentType, status = 200) {
     headers: { "content-type": contentType },
   });
 }
+
+export function redirectResponse(location, status = 302) {
+  return new Response(null, {
+    status,
+    headers: { location },
+  });
+}
+
+export async function publicLookup() {
+  return ["93.184.216.34"];
+}

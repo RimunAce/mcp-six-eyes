@@ -104,7 +104,7 @@ describe("OpenAICompatibleProvider", () => {
     const originalFetch = globalThis.fetch;
     try {
       globalThis.fetch = async () =>
-        jsonResponse({ error: { message: "quota exceeded" } }, 429);
+        jsonResponse({ error: { message: "quota exceeded" } }, 400);
       const provider = new OpenAICompatibleProvider({
         name: "openai",
         apiKey: "k",
@@ -205,8 +205,10 @@ describe("GoogleProvider", () => {
 
       assert.match(
         calls[0].url,
-        /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.0-flash:generateContent\?key=google-key/,
+        /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.0-flash:generateContent$/,
       );
+      assert.doesNotMatch(calls[0].url, /[?&]key=/);
+      assert.equal(calls[0].init.headers["x-goog-api-key"], "google-key");
 
       const body = JSON.parse(calls[0].init.body);
       const parts = body.contents[0].parts;
@@ -216,6 +218,78 @@ describe("GoogleProvider", () => {
       assert.ok(parts[2].inline_data.data.length > 10);
       assert.equal(parts[3].text, "Image 2:");
       assert.equal(body.generationConfig.maxOutputTokens, 512);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("provider HTTP retry", () => {
+  it("retries 429 then succeeds and honors Retry-After", async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse({ error: { message: "slow down" } }, 429, {
+          "retry-after": "0",
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { content: "recovered" } }],
+      });
+    };
+
+    try {
+      const provider = new OpenAICompatibleProvider({
+        name: "openai",
+        apiKey: "k",
+        model: "m",
+        baseUrl: "https://example.com/v1",
+        timeoutMs: 5_000,
+        retryMaxAttempts: 3,
+      });
+      const result = await provider.analyze({
+        task: "analyze",
+        prompt: "x",
+        images: [labeledFixture()],
+      });
+      assert.equal(result.text, "recovered");
+      assert.equal(calls, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("retries 5xx up to the attempt cap then fails", async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return jsonResponse({ error: { message: "upstream" } }, 503, {
+        "retry-after": "0",
+      });
+    };
+
+    try {
+      const provider = new OpenAICompatibleProvider({
+        name: "openai",
+        apiKey: "k",
+        model: "m",
+        baseUrl: "https://example.com/v1",
+        timeoutMs: 5_000,
+        retryMaxAttempts: 3,
+      });
+      await assert.rejects(
+        () =>
+          provider.analyze({
+            task: "analyze",
+            prompt: "x",
+            images: [labeledFixture()],
+          }),
+        /upstream/,
+      );
+      assert.equal(calls, 3);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -261,7 +335,7 @@ describe("VisionRouter", () => {
     globalThis.fetch = async (url) => {
       calls += 1;
       if (String(url).includes("openai.com")) {
-        return jsonResponse({ error: { message: "primary down" } }, 500);
+        return jsonResponse({ error: { message: "primary down" } }, 400);
       }
       return jsonResponse({
         content: [{ type: "text", text: "fallback ok" }],
@@ -302,7 +376,7 @@ describe("VisionRouter", () => {
   it("surfaces combined errors when both providers fail", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () =>
-      jsonResponse({ error: { message: "no capacity" } }, 503);
+      jsonResponse({ error: { message: "no capacity" } }, 400);
 
     try {
       const router = new VisionRouter({
@@ -448,7 +522,7 @@ describe("VisionRouter", () => {
     globalThis.fetch = async (url) => {
       calls += 1;
       if (String(url).includes("openai.com")) {
-        return jsonResponse({ error: { message: "primary down" } }, 500);
+        return jsonResponse({ error: { message: "primary down" } }, 400);
       }
       return jsonResponse({
         content: [{ type: "text", text: "fallback ok" }],

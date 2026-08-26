@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.2.1] - 2026-08-26
+
+### Fixed
+
+- MCP advertised server version now matches `package.json` instead of staying at `1.1.0`
+
+### Security
+
+- Block private, loopback, link-local, and cloud-metadata image URLs by default (`VISION_BLOCK_PRIVATE_URLS=true`), including redirect hops
+- Restrict local path and `file://` reads to `VISION_ALLOWED_ROOTS` (cwd + temp when unset)
+- Send Gemini API keys via `x-goog-api-key` instead of a query string
+
+### Added
+
+- Shared HTTP retry with jitter for provider `429`/`5xx` (honors `Retry-After`, default 3 attempts)
+- Optional tool `detail` (`auto` | `low` | `original`) and PNG downscale to `VISION_MAX_IMAGE_EDGE` (default 2048)
+- `extract_from_images` parses JSON, retries once on invalid JSON, then returns `isError`
+- `vision_status` reports allowed roots, private URL block, max edge, retry, and cache policy
+
+### Changed
+
+- Multi-image loads run in parallel with a concurrency cap of 4 (order and labels unchanged)
+- Fallback successes remain uncached so a recovered primary is not poisoned
+
 ## [1.2.0] - 2026-08-16
 
 ### Added
@@ -39,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Providers: OpenAI, Anthropic, Google Gemini, OpenRouter, custom OpenAI-compatible
 - Optional fallback provider
 
+[1.2.1]: https://www.npmjs.com/package/mcp-six-eyes/v/1.2.1
 [1.2.0]: https://www.npmjs.com/package/mcp-six-eyes/v/1.2.0
 [1.1.0]: https://www.npmjs.com/package/mcp-six-eyes/v/1.1.0
 [1.0.0]: https://www.npmjs.com/package/mcp-six-eyes/v/1.0.0

@@ -18,9 +18,12 @@ Images and prompts are not stored by this project beyond the lifetime of a tool 
 
 - Keep API keys in MCP client `env` config or a local `.env` that is never committed
 - Treat remote image URLs as untrusted input; only fetch sources you expect
+- `VISION_BLOCK_PRIVATE_URLS` (default `true`) rejects localhost, loopback, link-local, RFC1918, unique-local IPv6, and cloud metadata hosts. Redirects are re-checked. Disable only for a trusted local-dev image server
+- `VISION_ALLOWED_ROOTS` sandboxes local paths and `file://` URIs. Unset defaults to the process working directory plus the system temp directory. `..` is resolved and rejected if it escapes those roots
 - Use `VISION_MAX_IMAGE_BYTES` and `VISION_MAX_IMAGES` to bound request size
 - Prefer least-privilege API keys limited to the vision models you need
 - Do not log tool arguments that may contain base64 image payloads
+- Gemini requests send the API key in `x-goog-api-key`, not the URL query string
 
 ## Reporting a vulnerability
 

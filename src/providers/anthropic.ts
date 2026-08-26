@@ -1,3 +1,4 @@
+import { fetchWithRetry } from "../http.js";
 import type { VisionProvider, VisionRequest, VisionResult } from "./types.js";
 
 interface AnthropicOptions {
@@ -5,6 +6,7 @@ interface AnthropicOptions {
   model: string;
   timeoutMs: number;
   baseUrl?: string;
+  retryMaxAttempts?: number;
 }
 
 interface AnthropicResponse {
@@ -18,6 +20,7 @@ export class AnthropicProvider implements VisionProvider {
   private readonly apiKey: string;
   private readonly timeoutMs: number;
   private readonly baseUrl: string;
+  private readonly retryMaxAttempts?: number;
 
   constructor(options: AnthropicOptions) {
     this.apiKey = options.apiKey;
@@ -27,6 +30,7 @@ export class AnthropicProvider implements VisionProvider {
       /\/$/,
       "",
     );
+    this.retryMaxAttempts = options.retryMaxAttempts;
   }
 
   async analyze(request: VisionRequest): Promise<VisionResult> {
@@ -34,37 +38,34 @@ export class AnthropicProvider implements VisionProvider {
       throw new Error("At least one image is required.");
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const content: Array<Record<string, unknown>> = [];
 
-    try {
-      const content: Array<Record<string, unknown>> = [];
-
-      for (const image of request.images) {
-        if (request.images.length > 1) {
-          content.push({
-            type: "text",
-            text: `Image ${image.label}:`,
-          });
-        }
+    for (const image of request.images) {
+      if (request.images.length > 1) {
         content.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: image.mimeType,
-            data: image.base64,
-          },
+          type: "text",
+          text: `Image ${image.label}:`,
         });
       }
-
       content.push({
-        type: "text",
-        text: request.prompt,
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: image.mimeType,
+          data: image.base64,
+        },
       });
+    }
 
-      const response = await fetch(`${this.baseUrl}/v1/messages`, {
+    content.push({
+      type: "text",
+      text: request.prompt,
+    });
+
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/v1/messages`,
+      {
         method: "POST",
-        signal: controller.signal,
         headers: {
           "x-api-key": this.apiKey,
           "anthropic-version": "2023-06-01",
@@ -80,29 +81,28 @@ export class AnthropicProvider implements VisionProvider {
             },
           ],
         }),
-      });
+      },
+      { timeoutMs: this.timeoutMs, maxAttempts: this.retryMaxAttempts },
+    );
 
-      const payload = (await response.json()) as AnthropicResponse;
-      if (!response.ok) {
-        throw new Error(
-          payload.error?.message ||
-            `Anthropic API error (${response.status})`,
-        );
-      }
-
-      const text = (payload.content ?? [])
-        .filter((part) => part.type === "text" && typeof part.text === "string")
-        .map((part) => part.text)
-        .join("\n")
-        .trim();
-
-      if (!text) {
-        throw new Error("Anthropic returned an empty vision response.");
-      }
-
-      return { text, provider: this.name, model: this.model };
-    } finally {
-      clearTimeout(timer);
+    const payload = (await response.json()) as AnthropicResponse;
+    if (!response.ok) {
+      throw new Error(
+        payload.error?.message ||
+          `Anthropic API error (${response.status})`,
+      );
     }
+
+    const text = (payload.content ?? [])
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text)
+      .join("\n")
+      .trim();
+
+    if (!text) {
+      throw new Error("Anthropic returned an empty vision response.");
+    }
+
+    return { text, provider: this.name, model: this.model };
   }
 }

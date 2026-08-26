@@ -1,3 +1,4 @@
+import { fetchWithRetry } from "../http.js";
 import type { VisionProvider, VisionRequest, VisionResult } from "./types.js";
 
 interface OpenAICompatOptions {
@@ -7,6 +8,7 @@ interface OpenAICompatOptions {
   baseUrl: string;
   timeoutMs: number;
   extraHeaders?: Record<string, string>;
+  retryMaxAttempts?: number;
 }
 
 interface ChatCompletionResponse {
@@ -37,6 +39,7 @@ export class OpenAICompatibleProvider implements VisionProvider {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly extraHeaders: Record<string, string>;
+  private readonly retryMaxAttempts?: number;
 
   constructor(options: OpenAICompatOptions) {
     this.name = options.name;
@@ -45,6 +48,7 @@ export class OpenAICompatibleProvider implements VisionProvider {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs;
     this.extraHeaders = options.extraHeaders ?? {};
+    this.retryMaxAttempts = options.retryMaxAttempts;
   }
 
   async analyze(request: VisionRequest): Promise<VisionResult> {
@@ -52,29 +56,26 @@ export class OpenAICompatibleProvider implements VisionProvider {
       throw new Error("At least one image is required.");
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const content: Array<Record<string, unknown>> = [
+      { type: "text", text: request.prompt },
+    ];
 
-    try {
-      const content: Array<Record<string, unknown>> = [
-        { type: "text", text: request.prompt },
-      ];
-
-      for (const image of request.images) {
-        if (request.images.length > 1) {
-          content.push({ type: "text", text: `Image ${image.label}:` });
-        }
-        content.push({
-          type: "image_url",
-          image_url: {
-            url: image.dataUrl,
-          },
-        });
+    for (const image of request.images) {
+      if (request.images.length > 1) {
+        content.push({ type: "text", text: `Image ${image.label}:` });
       }
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: image.dataUrl,
+        },
+      });
+    }
 
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/chat/completions`,
+      {
         method: "POST",
-        signal: controller.signal,
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
@@ -90,24 +91,23 @@ export class OpenAICompatibleProvider implements VisionProvider {
             },
           ],
         }),
-      });
+      },
+      { timeoutMs: this.timeoutMs, maxAttempts: this.retryMaxAttempts },
+    );
 
-      const payload = (await response.json()) as ChatCompletionResponse;
-      if (!response.ok) {
-        throw new Error(
-          payload.error?.message ||
-            `${this.name} API error (${response.status})`,
-        );
-      }
-
-      const text = extractText(payload);
-      if (!text) {
-        throw new Error(`${this.name} returned an empty vision response.`);
-      }
-
-      return { text, provider: this.name, model: this.model };
-    } finally {
-      clearTimeout(timer);
+    const payload = (await response.json()) as ChatCompletionResponse;
+    if (!response.ok) {
+      throw new Error(
+        payload.error?.message ||
+          `${this.name} API error (${response.status})`,
+      );
     }
+
+    const text = extractText(payload);
+    if (!text) {
+      throw new Error(`${this.name} returned an empty vision response.`);
+    }
+
+    return { text, provider: this.name, model: this.model };
   }
 }

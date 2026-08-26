@@ -17,6 +17,8 @@ import {
   withTempDir,
   writeTempPng,
   binaryResponse,
+  publicLookup,
+  redirectResponse,
 } from "./helpers.mjs";
 
 describe("normalizeImageInputs", () => {
@@ -150,6 +152,7 @@ describe("loadImageFromSource", () => {
     try {
       const image = await loadImageFromSource("https://example.com/a.png", {
         maxImageBytes: 1_000_000,
+        lookup: publicLookup,
       });
       assert.equal(image.mimeType, "image/png");
       assert.equal(image.source, "https://example.com/a.png");
@@ -167,12 +170,142 @@ describe("loadImageFromSource", () => {
         () =>
           loadImageFromSource("https://example.com/missing.png", {
             maxImageBytes: 1_000_000,
+            lookup: publicLookup,
           }),
         /Failed to download image \(404/,
       );
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("blocks private and metadata URLs", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = async () => {
+      fetches += 1;
+      return binaryResponse(TINY_PNG, "image/png");
+    };
+    try {
+      for (const url of [
+        "http://127.0.0.1/secret.png",
+        "http://localhost/secret.png",
+        "http://192.168.1.10/a.png",
+        "http://10.0.0.5/a.png",
+        "http://172.16.4.1/a.png",
+        "http://169.254.169.254/latest/meta-data",
+        "http://[::1]/a.png",
+        "http://[fe80::1]/a.png",
+        "http://[fd12:3456:789a::1]/a.png",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://2130706433/a.png",
+      ]) {
+        await assert.rejects(
+          () =>
+            loadImageFromSource(url, {
+              maxImageBytes: 1_000_000,
+              lookup: publicLookup,
+            }),
+          /Blocked private or metadata/,
+        );
+      }
+      assert.equal(fetches, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("blocks redirects to private targets", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("example.com")) {
+        return redirectResponse("http://127.0.0.1/secret.png");
+      }
+      return binaryResponse(TINY_PNG, "image/png");
+    };
+    try {
+      await assert.rejects(
+        () =>
+          loadImageFromSource("https://example.com/a.png", {
+            maxImageBytes: 1_000_000,
+            lookup: publicLookup,
+          }),
+        /Blocked private or metadata/,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("allows localhost when private URL block is disabled", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => binaryResponse(TINY_PNG, "image/png");
+    try {
+      const image = await loadImageFromSource("http://127.0.0.1:3000/dev.png", {
+        maxImageBytes: 1_000_000,
+        blockPrivateUrls: false,
+      });
+      assert.equal(image.mimeType, "image/png");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("rejects local paths outside allowed roots", async () => {
+    await withTempDir(async (allowed) => {
+      await withTempDir(async (denied) => {
+        const secret = await writeTempPng(denied, "secret.png");
+        await assert.rejects(
+          () =>
+            loadImageFromSource(secret, {
+              maxImageBytes: 1_000_000,
+              allowedRoots: [allowed],
+            }),
+          /outside VISION_ALLOWED_ROOTS/,
+        );
+      });
+    });
+  });
+
+  it("rejects path traversal after resolve", async () => {
+    await withTempDir(async (allowed) => {
+      await withTempDir(async (denied) => {
+        const secret = await writeTempPng(denied, "secret.png");
+        const traversal = path.join(allowed, "..", path.basename(denied), "secret.png");
+        await assert.rejects(
+          () =>
+            loadImageFromSource(traversal, {
+              maxImageBytes: 1_000_000,
+              allowedRoots: [allowed],
+            }),
+          /outside VISION_ALLOWED_ROOTS/,
+        );
+        assert.equal(path.resolve(traversal), path.resolve(secret));
+      });
+    });
+  });
+
+  it("sandboxes file:// URIs", async () => {
+    await withTempDir(async (allowed) => {
+      const filePath = await writeTempPng(allowed, "ok.png");
+      const image = await loadImageFromSource(pathToFileURL(filePath).href, {
+        maxImageBytes: 1_000_000,
+        allowedRoots: [allowed],
+      });
+      assert.equal(image.mimeType, "image/png");
+
+      await withTempDir(async (denied) => {
+        const secret = await writeTempPng(denied, "secret.png");
+        await assert.rejects(
+          () =>
+            loadImageFromSource(pathToFileURL(secret).href, {
+              maxImageBytes: 1_000_000,
+              allowedRoots: [allowed],
+            }),
+          /outside VISION_ALLOWED_ROOTS/,
+        );
+      });
+    });
   });
 });
 
@@ -232,6 +365,47 @@ describe("loadLabeledImages", () => {
         /Too many images/,
       );
     });
+  });
+
+  it("loads in parallel while preserving input order", async () => {
+    const order = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const href = String(url);
+      const delay = href.includes("slow") ? 40 : href.includes("mid") ? 15 : 1;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      order.push(href);
+      return binaryResponse(TINY_PNG, "image/png");
+    };
+    try {
+      const labeled = await loadLabeledImages(
+        [
+          { source: "https://example.com/slow.png", label: "a" },
+          { source: "https://example.com/fast.png", label: "b" },
+          { source: "https://example.com/mid.png", label: "c" },
+        ],
+        {
+          maxImageBytes: 1_000_000,
+          maxImages: 10,
+          lookup: publicLookup,
+        },
+      );
+      assert.deepEqual(
+        labeled.map((img) => img.label),
+        ["a", "b", "c"],
+      );
+      assert.deepEqual(
+        labeled.map((img) => img.source),
+        [
+          "https://example.com/slow.png",
+          "https://example.com/fast.png",
+          "https://example.com/mid.png",
+        ],
+      );
+      assert.ok(order.indexOf("https://example.com/fast.png") < order.indexOf("https://example.com/slow.png"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("formats inventory lines for prompts", async () => {
